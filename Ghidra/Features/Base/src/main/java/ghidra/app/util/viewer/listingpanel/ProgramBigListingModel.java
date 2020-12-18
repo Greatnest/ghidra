@@ -69,11 +69,6 @@ public class ProgramBigListingModel implements ListingModel, FormatModelListener
 	}
 
 	private void initOptions() {
-		fieldOptions.registerOption(DISPLAY_EXTERNAL_FUNCTION_POINTER_OPTION_NAME, true, null,
-			"Shows/hides function header format for pointers to external functions");
-		fieldOptions.registerOption(DISPLAY_NONEXTERNAL_FUNCTION_POINTER_OPTION_NAME, false, null,
-			"Shows/hides function header format for pointers to non-external functions");
-
 		showExternalFunctionPointerFormat =
 			fieldOptions.getBoolean(DISPLAY_EXTERNAL_FUNCTION_POINTER_OPTION_NAME, true);
 		showNonExternalFunctionPointerFormat =
@@ -195,8 +190,7 @@ public class ProgramBigListingModel implements ListingModel, FormatModelListener
 		}
 
 		if (dataList != null) {
-			for (int i = 0; i < dataList.size(); i++) {
-				Data d = dataList.get(i);
+			for (Data d : dataList) {
 				format = formatMgr.getOpenDataFormat(d);
 				if (format != null) {
 					format.addLayouts(list, 0, new DataProxy(this, program, d));
@@ -498,8 +492,8 @@ public class ProgramBigListingModel implements ListingModel, FormatModelListener
 	}
 
 	@Override
-	public void openData(Data data) {
-		openCloseMgr.openData(data);
+	public boolean openData(Data data) {
+		return openCloseMgr.openData(data);
 
 	}
 
@@ -616,5 +610,12 @@ public class ProgramBigListingModel implements ListingModel, FormatModelListener
 				cache.put(addr, layout);
 			}
 		}
+	}
+
+	@Override
+	public ListingModel copy() {
+		ProgramBigListingModel model = new ProgramBigListingModel(program, formatMgr);
+		model.openCloseMgr = openCloseMgr;
+		return model;
 	}
 }

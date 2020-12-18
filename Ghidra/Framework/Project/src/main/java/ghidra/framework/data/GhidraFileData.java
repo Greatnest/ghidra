@@ -23,6 +23,7 @@ import java.util.Map;
 import javax.swing.Icon;
 
 import db.DBHandle;
+import db.Field;
 import db.buffers.*;
 import ghidra.framework.client.ClientUtil;
 import ghidra.framework.client.NotConnectedException;
@@ -579,7 +580,7 @@ public class GhidraFileData {
 	boolean isVersioned() {
 		synchronized (fileSystem) {
 			if (versionedFolderItem == null) {
-				return false;
+				return isCheckedOut();
 			}
 			return !isHijacked();
 		}
@@ -892,6 +893,11 @@ public class GhidraFileData {
 			}
 			catch (InvalidNameException e) {
 				throw new AssertException("Unexpected error", e);
+			}
+			finally {
+				if (folderItem == null) {
+					versionedFolderItem.terminateCheckout(checkout.getCheckoutId(), false);
+				}
 			}
 			folderItem.setCheckout(checkout.getCheckoutId(), exclusive, checkoutVersion,
 				folderItem.getCurrentVersion());
@@ -1742,6 +1748,9 @@ public class GhidraFileData {
 		}
 		catch (FileNotFoundException e) {
 			// file has been deleted, just return an empty map.
+		}
+		catch (Field.UnsupportedFieldException e) {
+			// file created with newer version of Ghidra
 		}
 		catch (IOException e) {
 			Msg.error(this, "Read meta-data error", e);

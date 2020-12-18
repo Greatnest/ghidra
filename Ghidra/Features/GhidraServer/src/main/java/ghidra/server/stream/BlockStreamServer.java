@@ -33,7 +33,7 @@ import ghidra.util.timer.GTimerMonitor;
 
 /**
  * <code>BlockStreamServer</code> provides a block stream server implementation intended for 
- * integration with the RMI GhidraServer implementation.  The default instance will obtain its' 
+ * integration with the RMI GhidraServer implementation.  The default instance will obtain its 
  * port from the {@link ServerPortFactory} while all instances will bind to the default 
  * {@link InetAddress#getLocalHost()} or the host address specified via the RMI property
  * <code>java.rmi.server.hostname</code> which is set via the GhidraServer -ip command
@@ -314,7 +314,8 @@ public class BlockStreamServer extends Thread {
 						": failed to read stream header");
 				}
 				else if (!(e instanceof EOFException)) { // silent on closed connection
-					log.error("file block stream failed from " + socket.getInetAddress(), e);
+					log.error("file block stream failed from " + socket.getInetAddress() + ": " +
+						e.getMessage());
 				}
 			}
 			finally {

@@ -27,7 +27,6 @@ import ghidra.program.model.listing.*;
 import ghidra.program.model.mem.*;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.symbol.*;
-import ghidra.program.util.ProgramContextImpl;
 
 /**
  * PseudoDisassembler.java
@@ -84,18 +83,6 @@ public class PseudoDisassembler {
 		pointerSize = program.getDefaultPointerSize();
 
 		this.programContext = program.getProgramContext();
-	}
-
-	public PseudoDisassembler(Language lang, Memory mem) {
-		program = null;
-
-		this.language = lang;
-
-		this.memory = mem;
-
-		pointerSize = language.getDefaultSpace().getPointerSize();
-
-		programContext = new ProgramContextImpl(language.getRegisters());
 	}
 
 	/**
@@ -215,7 +202,7 @@ public class PseudoDisassembler {
 	 * 
 	 * @param addr address to disassemble
 	 * @param bytes bytes to use instead of those currently defined in program
-	 * @param PseudoDisassemblerContext the disassembler context to use.
+	 * @param disassemblerContext the disassembler context to use.
 	 * @return PseudoInstruction.
 	 * 
 	 * @throws InsufficientBytesException
@@ -265,9 +252,6 @@ public class PseudoDisassembler {
 	 * @param addr location to get a PseudoData item for
 	 * @param dt the data type to be applied
 	 * @return PsuedoData that acts like Data
-	 * 
-	 * @throws InsufficientBytesException
-	 * @throws UnknownContextException
 	 */
 	public PseudoData applyDataType(Address addr, DataType dt) {
 
@@ -314,10 +298,12 @@ public class PseudoDisassembler {
 
 	/**
 	 * Check that this entry point leads to a well behaved subroutine:
+	 * <ul>
 	 * <li>It should return.</li>
 	 * <li>Hit no bad instructions.</li>
 	 * <li>Have only one entry point.</li>
 	 * <li>Not overlap any existing data or instructions.</li>
+	 * </ul>
 	 * @param entryPoint entry point to check
 	 * @return true if entry point leads to a well behaved subroutine
 	 */
@@ -328,10 +314,12 @@ public class PseudoDisassembler {
 	/**
 	 * Check that this entry point leads to a well behaved subroutine, allow it
 	 * to fall into existing code.
+	 * <ul>
 	 * <li>It should return.</li>
 	 * <li>Hit no bad instructions.</li>
 	 * <li>Have only one entry point.</li>
 	 * <li>Not overlap any existing data or cause offcut references.</li>
+	 * </ul>
 	 * @param entryPoint entry point to check
 	 * @param allowExistingCode true allows this subroutine to flow into existing instructions.
 	 * @return true if entry point leads to a well behaved subroutine
@@ -343,11 +331,11 @@ public class PseudoDisassembler {
 	/**
 	 * Check that this entry point leads to a well behaved subroutine, allow it
 	 * to fall into existing code.
-	 * 
+	 * <ul>
 	 * <li>Hit no bad instructions.</li>
 	 * <li>Have only one entry point.</li>
 	 * <li>Not overlap any existing data or cause offcut references.</li>
-	 * 
+	 * </ul>
 	 * @param entryPoint         entry point to check
 	 * @param allowExistingCode  true allows this subroutine to flow into existing instructions.
 	 * @param mustTerminate      true if the subroutine must terminate
@@ -361,11 +349,12 @@ public class PseudoDisassembler {
 
 	/**
 	 * Check that this entry point leads to valid code:
+	 * <ul>
 	 * <li> May have multiple entries into the body of the code.
 	 * <li>The intent is that it be valid code, not nice code.
 	 * <li>Hit no bad instructions.
 	 * <li>It should return.
-	 * </li>
+	 * </ul>
 	 * @param entryPoint
 	 * @return true if the entry point leads to valid code
 	 */
@@ -376,11 +365,12 @@ public class PseudoDisassembler {
 
 	/**
 	 * Check that this entry point leads to valid code:
+	 * <ul>
 	 * <li> May have multiple entries into the body of the code.
 	 * <li>The intent is that it be valid code, not nice code.
 	 * <li>Hit no bad instructions.
 	 * <li>It should return.
-	 * </li>
+	 * </ul>
 	 * 
 	 * @param entryPoint location to test for valid code
 	 * @param context disassembly context for program
@@ -437,8 +427,8 @@ public class PseudoDisassembler {
 			byte[] ptrbytes = new byte[pointerSize];
 			if (memory.getBytes(tempAddr, ptrbytes) == ptrbytes.length) {
 				boolean allZero = true;
-				for (int i = 0; i < ptrbytes.length; i++) {
-					if (ptrbytes[i] != 0) {
+				for (byte ptrbyte : ptrbytes) {
+					if (ptrbyte != 0) {
 						allZero = false;
 						break;
 					}
@@ -591,6 +581,7 @@ public class PseudoDisassembler {
 			boolean allowExistingInstructions, boolean mustTerminate) {
 		AddressSet body = new AddressSet();
 		AddressSet instrStarts = new AddressSet();
+		AddressSetView execSet = memory.getExecuteSet();
 
 		if (hasLowBitCodeModeInAddrValues(program)) {
 			entryPoint = setTargeContextForDisassembly(procContext, entryPoint);
@@ -615,8 +606,6 @@ public class PseudoDisassembler {
 			return false;
 		}
 
-		AddressSetView executeSet = memory.getExecuteSet();
-
 		RepeatInstructionByteTracker repeatInstructionByteTracker =
 			new RepeatInstructionByteTracker(MAX_REPEAT_BYTES_LIMIT, null);
 
@@ -640,7 +629,7 @@ public class PseudoDisassembler {
 					//    it is probably a JUMP to an external function.
 					MemoryBlock block = memory.getBlock(target);
 					if (block == null || block.isInitialized() ||
-						!block.getName().equals("EXTERNAL")) {
+						!block.getName().equals(MemoryBlock.EXTERNAL_BLOCK_NAME)) {
 						return false;
 					}
 					targetList.remove(target);
@@ -765,24 +754,24 @@ public class PseudoDisassembler {
 						}
 					}
 					if (flows != null && flows.length > 0) {
-						for (int j = 0; j < flows.length; j++) {
+						for (Address flow : flows) {
 							// does this reference a valid function?
 							if (program != null) {
-								Symbol[] syms = program.getSymbolTable().getSymbols(flows[j]);
-								for (int k = 0; k < syms.length; k++) {
-									if (syms[k].getSymbolType() == SymbolType.FUNCTION) {
+								Symbol[] syms = program.getSymbolTable().getSymbols(flow);
+								for (Symbol sym : syms) {
+									if (sym.getSymbolType() == SymbolType.FUNCTION) {
 										didCallValidSubroutine = true;
 										break;
 									}
 								}
 							}
 							// if respecting execute flag on memory, test to make sure we did flow into non-execute memory
-							if (respectExecuteFlag && !executeSet.isEmpty() &&
-								!executeSet.contains(flows[j])) {
-								if (!flows[j].isExternalAddress()) {
-									MemoryBlock block = memory.getBlock(flows[j]);
+							if (respectExecuteFlag && !execSet.isEmpty() && !execSet.contains(flow)) {
+								if (!flow.isExternalAddress()) {
+									MemoryBlock block = memory.getBlock(flow);
 									// flowing into non-executable, but readable memory is bad
-									if (block != null && block.isRead()) {
+									if (block != null && block.isRead() &&
+										!MemoryBlock.EXTERNAL_BLOCK_NAME.equals(block.getName())) {
 										return false;
 									}
 								}
@@ -862,8 +851,8 @@ public class PseudoDisassembler {
 	 */
 	private boolean isReallyReturn(Instruction instr) {
 		PcodeOp[] pcode = instr.getPcode();
-		for (int i = 0; i < pcode.length; i++) {
-			if (pcode[i].getOpcode() == PcodeOp.RETURN) {
+		for (PcodeOp element : pcode) {
+			if (element.getOpcode() == PcodeOp.RETURN) {
 				return true;
 			}
 		}
@@ -878,8 +867,8 @@ public class PseudoDisassembler {
 		}
 
 		// check that body does not wander into non-executable memory
-		AddressSetView executeSet = program.getMemory().getExecuteSet();
-		if (respectExecuteFlag && !executeSet.isEmpty() && !body.subtract(executeSet).isEmpty()) {
+		AddressSetView execSet = memory.getExecuteSet();
+		if (respectExecuteFlag && !execSet.isEmpty() && !execSet.contains(body)) {
 			return false;
 		}
 
@@ -890,8 +879,9 @@ public class PseudoDisassembler {
 			return false;
 		}
 
+		boolean canHaveOffcutEntry = hasLowBitCodeModeInAddrValues(program);
 		AddressSet strictlyBody = body.subtract(starts);
-		if (hasLowBitCodeModeInAddrValues(program)) {
+		if (canHaveOffcutEntry) {
 			strictlyBody.deleteRange(entry, entry.add(1));
 		}
 		AddressIterator addrIter =

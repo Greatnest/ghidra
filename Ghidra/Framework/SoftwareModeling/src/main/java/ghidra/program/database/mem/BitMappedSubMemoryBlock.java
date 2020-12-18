@@ -16,12 +16,12 @@
 package ghidra.program.database.mem;
 
 import java.io.IOException;
-import java.util.List;
 
 import db.Record;
 import ghidra.program.database.map.AddressMapDB;
 import ghidra.program.model.address.*;
-import ghidra.program.model.mem.*;
+import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.mem.MemoryBlockType;
 
 /**
  * Class for handling bit mapped memory sub blocks
@@ -36,7 +36,7 @@ class BitMappedSubMemoryBlock extends SubMemoryBlock {
 		this.memMap = adapter.getMemoryMap();
 		AddressMapDB addressMap = memMap.getAddressMap();
 		mappedAddress = addressMap.decodeAddress(
-			record.getLongValue(MemoryMapDBAdapter.SUB_SOURCE_OFFSET_COL), false);
+			record.getLongValue(MemoryMapDBAdapter.SUB_LONG_DATA2_COL), false);
 	}
 
 	@Override
@@ -45,13 +45,14 @@ class BitMappedSubMemoryBlock extends SubMemoryBlock {
 	}
 
 	@Override
-	public byte getByte(long offset) throws MemoryAccessException, IOException {
+	public byte getByte(long offsetInMemBlock) throws MemoryAccessException, IOException {
+		long offsetInSubBlock = offsetInMemBlock - subBlockOffset;
 		if (ioPending) {
 			throw new MemoryAccessException("Cyclic Access");
 		}
 		try {
 			ioPending = true;
-			return getBitOverlayByte(offset);
+			return getBitOverlayByte(offsetInSubBlock);
 		}
 		catch (AddressOverflowException e) {
 			throw new MemoryAccessException("No memory at address");
@@ -61,22 +62,24 @@ class BitMappedSubMemoryBlock extends SubMemoryBlock {
 		}
 	}
 
-	public AddressRange getMappedRange() {
-		Address endMappedAddress = mappedAddress.add((length - 1) / 8);
+	AddressRange getMappedRange() {
+		Address endMappedAddress = mappedAddress.add((subBlockLength - 1) / 8);
 		return new AddressRangeImpl(mappedAddress, endMappedAddress);
 	}
 
 	@Override
-	public int getBytes(long offset, byte[] b, int off, int len)
+	public int getBytes(long offsetInMemBlock, byte[] b, int off, int len)
 			throws MemoryAccessException, IOException {
+		long offsetInSubBlock = offsetInMemBlock - subBlockOffset;
+		long available = subBlockLength - offsetInSubBlock;
+		len = (int) Math.min(len, available);
 		if (ioPending) {
 			new MemoryAccessException("Cyclic Access");
 		}
 		try {
 			ioPending = true;
-			len = (int) Math.min(len, length - offset);
 			for (int i = 0; i < len; i++) {
-				b[i + off] = getBitOverlayByte(offset++);
+				b[i + off] = getBitOverlayByte(offsetInMemBlock++);
 			}
 			return len;
 		}
@@ -89,13 +92,15 @@ class BitMappedSubMemoryBlock extends SubMemoryBlock {
 	}
 
 	@Override
-	public void putByte(long offset, byte b) throws MemoryAccessException, IOException {
+	public void putByte(long offsetInMemBlock, byte b) throws MemoryAccessException, IOException {
+		long offsetInSubBlock = offsetInMemBlock - subBlockOffset;
 		try {
 			if (ioPending) {
 				new MemoryAccessException("Cyclic Access");
 			}
 			ioPending = true;
-			doPutByte(mappedAddress.addNoWrap(offset / 8), (int) (offset % 8), b);
+			doPutByte(mappedAddress.addNoWrap(offsetInSubBlock / 8), (int) (offsetInSubBlock % 8),
+				b);
 		}
 		catch (AddressOverflowException e) {
 			new MemoryAccessException("No memory at address");
@@ -107,17 +112,20 @@ class BitMappedSubMemoryBlock extends SubMemoryBlock {
 	}
 
 	@Override
-	public int putBytes(long offset, byte[] b, int off, int len)
+	public int putBytes(long offsetInMemBlock, byte[] b, int off, int len)
 			throws MemoryAccessException, IOException {
+		long offsetInSubBlock = offsetInMemBlock - subBlockOffset;
+		long available = subBlockLength - offsetInSubBlock;
+		len = (int) Math.min(len, available);
 		try {
 			if (ioPending) {
 				new MemoryAccessException("Cyclic Access");
 			}
 			ioPending = true;
-			len = (int) Math.min(len, length - offset);
 			for (int i = 0; i < len; i++) {
-				doPutByte(mappedAddress.addNoWrap(offset / 8), (int) (offset % 8), b[off + i]);
-				offset++;
+				doPutByte(mappedAddress.addNoWrap(offsetInSubBlock / 8),
+					(int) (offsetInSubBlock % 8), b[off + i]);
+				offsetInSubBlock++;
 			}
 			return len;
 		}
@@ -172,57 +180,6 @@ class BitMappedSubMemoryBlock extends SubMemoryBlock {
 	@Override
 	protected String getDescription() {
 		return "Bit Mapped: " + mappedAddress;
-	}
-
-	@Override
-	protected ByteSourceRangeList getByteSourceRangeList(MemoryBlock block, Address start,
-			long memBlockOffset,
-			long size) {
-		ByteSourceRangeList result = new ByteSourceRangeList();
-
-		// Since mapped blocks are mapped onto other memory blocks, find those blocks and
-		// handle each one separately
-
-		// converts to byte space since 8 bytes in this block's space maps to 1 byte in real memory
-		Address startMappedAddress = mappedAddress.add(memBlockOffset / 8);
-		Address endMappedAddress = mappedAddress.add((memBlockOffset + size - 1) / 8);
-		List<MemoryBlockDB> blocks = memMap.getBlocks(startMappedAddress, endMappedAddress);
-
-		// for each block, get its ByteSourceSet and then translate that set back into this block's
-		// addresses
-		for (MemoryBlockDB mappedBlock : blocks) {
-			Address startInBlock = max(mappedBlock.getStart(), startMappedAddress);
-			Address endInBlock = min(mappedBlock.getEnd(), endMappedAddress);
-			long blockSize = endInBlock.subtract(startInBlock) + 1;
-			ByteSourceRangeList ranges =
-				mappedBlock.getByteSourceRangeList(startInBlock, blockSize);
-			for (ByteSourceRange bsRange : ranges) {
-				result.add(translate(block, bsRange, start, memBlockOffset, size));
-			}
-		}
-		return result;
-	}
-
-	// translates the ByteSourceRange back to addresse
-	private ByteSourceRange translate(MemoryBlock block, ByteSourceRange bsRange, Address start,
-			long offset,
-			long bitLength) {
-		Address startMappedAddress = mappedAddress.add(offset / 8);
-		Address normalizedStart = start.subtract(offset % 8);
-		long mappedOffsetFromStart = bsRange.getStart().subtract(startMappedAddress);
-		long offsetFromStart = mappedOffsetFromStart * 8;
-		Address startAddress = normalizedStart.add(offsetFromStart);
-
-		return new BitMappedByteSourceRange(block, startAddress, bsRange.getSourceId(),
-			bsRange.getOffset(), bsRange.getSize());
-	}
-
-	Address min(Address a1, Address a2) {
-		return a1.compareTo(a2) <= 0 ? a1 : a2;
-	}
-
-	Address max(Address a1, Address a2) {
-		return a1.compareTo(a2) >= 0 ? a1 : a2;
 	}
 
 }

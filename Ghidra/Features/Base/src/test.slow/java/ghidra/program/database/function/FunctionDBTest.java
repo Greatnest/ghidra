@@ -45,7 +45,8 @@ import ghidra.util.task.TaskMonitorAdapter;
 /**
  *
  */
-public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implements DomainObjectListener {
+public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest
+		implements DomainObjectListener {
 
 	private ProgramDB program;
 	private AddressSpace space;
@@ -71,8 +72,9 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 
 		space = program.getAddressFactory().getDefaultAddressSpace();
 		transactionID = program.startTransaction("Test");
-		program.getMemory().createInitializedBlock("test", addr(100), 500, (byte) 0,
-			TaskMonitorAdapter.DUMMY_MONITOR, false);
+		program.getMemory()
+				.createInitializedBlock("test", addr(100), 500, (byte) 0,
+					TaskMonitorAdapter.DUMMY_MONITOR, false);
 		functionManager = program.getFunctionManager();
 	}
 
@@ -609,7 +611,7 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		return f;
 	}
 
-	private void assertParameters(Parameter p1, Parameter p2, boolean checkStorage) {
+	private void assertParameter(Parameter p1, Parameter p2, boolean checkStorage) {
 		assertEquals(p1.getName(), p2.getName());
 		if (!p1.getDataType().isEquivalent(p2.getDataType())) {
 			Assert.fail("Expected " + p1.getDataType().getName() + " but parameter has type " +
@@ -816,20 +818,74 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		assertEquals("__stdcall", f.getCallingConventionName());
 
 		Parameter return1 = f.getReturn();
-		assertParameters(returnVar, return1, true);
+		assertParameter(returnVar, return1, true);
 		assertEquals("r6:4", return1.getVariableStorage().toString());
 
 		Parameter[] parameters = f.getParameters();
 		assertEquals(3, parameters.length);
 
-		assertParameters(p1, parameters[0], true);
-		assertParameters(p2, parameters[1], true);
-		assertParameters(p3, parameters[2], true);
+		assertParameter(p1, parameters[0], true);
+		assertParameter(p2, parameters[1], true);
+		assertParameter(p3, parameters[2], true);
 
 	}
 
 	@Test
 	public void testUpdateFunctionDynamicStorage() throws Exception {
+
+		Function f = createTestFunction();
+
+		Structure bigStruct = new StructureDataType("bigStruct", 20);
+
+		ReturnParameterImpl returnVar =
+			new ReturnParameterImpl(bigStruct, VariableStorage.UNASSIGNED_STORAGE, program);
+
+		ParameterImpl p1 =
+			new ParameterImpl(Function.RETURN_PTR_PARAM_NAME, new PointerDataType(bigStruct),
+				new VariableStorage(program, program.getRegister("r7")), program);
+		Structure classStruct = VariableUtilities.findOrCreateClassStruct(f);
+		ParameterImpl p2 =
+			new ParameterImpl(Function.THIS_PARAM_NAME, new PointerDataType(classStruct),
+				new VariableStorage(program, program.getRegister("r8")), program);
+		ParameterImpl p3 = new ParameterImpl("m2", LongLongDataType.dataType,
+			new VariableStorage(program, program.getRegister("r12"), program.getRegister("r11")),
+			program);
+		ParameterImpl p4 = new ParameterImpl("m3", ByteDataType.dataType,
+			new VariableStorage(program, program.getRegister("r9")), program);
+
+		// function updated with formal signature
+		f.updateFunction("__thiscall", returnVar, FunctionUpdateType.DYNAMIC_STORAGE_ALL_PARAMS,
+			true, SourceType.USER_DEFINED, p3, p4);
+
+		assertTrue(!f.hasCustomVariableStorage());
+		assertEquals("__thiscall", f.getCallingConventionName());
+
+		Parameter return1 = f.getReturn();
+		assertTrue(return1.isForcedIndirect());
+		assertTrue(bigStruct.isEquivalent(return1.getFormalDataType()));
+		assertTrue(returnVar.getDataType().isEquivalent(returnVar.getDataType()));
+		assertEquals("r12:4 (ptr)", return1.getVariableStorage().toString());
+
+		Parameter[] parameters = f.getParameters();
+		assertEquals(4, parameters.length);
+
+		assertParameter(p1, parameters[0], false);
+		assertEquals(0, parameters[0].getOrdinal());
+		assertEquals("r12:4 (auto)", parameters[0].getVariableStorage().toString());
+		assertParameter(p2, parameters[1], false);
+		assertEquals(1, parameters[1].getOrdinal());
+		assertEquals("r11:4 (auto)", parameters[1].getVariableStorage().toString());
+		assertParameter(p3, parameters[2], false);
+		assertEquals(2, parameters[2].getOrdinal());
+		assertEquals("Stack[0x0]:8", parameters[2].getVariableStorage().toString());
+		assertParameter(p4, parameters[3], false);
+		assertEquals(3, parameters[3].getOrdinal());
+		assertEquals("r10l:1", parameters[3].getVariableStorage().toString());
+
+	}
+
+	@Test
+	public void testUpdateFunctionDynamicStorage1() throws Exception {
 
 		Function f = createTestFunction();
 
@@ -841,32 +897,44 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		ParameterImpl p1 =
 			new ParameterImpl(Function.RETURN_PTR_PARAM_NAME, new PointerDataType(bigStruct),
 				new VariableStorage(program, program.getRegister("r7")), program);
-		ParameterImpl p2 = new ParameterImpl("m2", LongLongDataType.dataType,
+		Structure classStruct = VariableUtilities.findOrCreateClassStruct(f);
+		ParameterImpl p2 =
+			new ParameterImpl(Function.THIS_PARAM_NAME, new PointerDataType(classStruct),
+				new VariableStorage(program, program.getRegister("r8")), program);
+		ParameterImpl p3 = new ParameterImpl("m2", LongLongDataType.dataType,
 			new VariableStorage(program, program.getRegister("r12"), program.getRegister("r11")),
 			program);
-		ParameterImpl p3 = new ParameterImpl("m3", ByteDataType.dataType,
+		ParameterImpl p4 = new ParameterImpl("m3", ByteDataType.dataType,
 			new VariableStorage(program, program.getRegister("r9")), program);
 
-		f.updateFunction("__stdcall", returnVar, FunctionUpdateType.DYNAMIC_STORAGE_ALL_PARAMS,
-			true, SourceType.USER_DEFINED, p1, p2, p3);
+		// function updated with auto parameters
+		f.updateFunction("__thiscall", returnVar, FunctionUpdateType.DYNAMIC_STORAGE_ALL_PARAMS,
+			true, SourceType.USER_DEFINED, p1, p2, p3, p4);
 
 		assertTrue(!f.hasCustomVariableStorage());
-		assertEquals("__stdcall", f.getCallingConventionName());
+		assertEquals("__thiscall", f.getCallingConventionName());
 
 		Parameter return1 = f.getReturn();
+		assertTrue(return1.isForcedIndirect());
 		assertTrue(bigStruct.isEquivalent(return1.getFormalDataType()));
 		assertTrue(returnVar.getDataType().isEquivalent(returnVar.getDataType()));
 		assertEquals("r12:4 (ptr)", return1.getVariableStorage().toString());
 
 		Parameter[] parameters = f.getParameters();
-		assertEquals(3, parameters.length);
+		assertEquals(4, parameters.length);
 
-		assertParameters(p1, parameters[0], false);
+		assertParameter(p1, parameters[0], false);
+		assertEquals(0, parameters[0].getOrdinal());
 		assertEquals("r12:4 (auto)", parameters[0].getVariableStorage().toString());
-		assertParameters(p2, parameters[1], false);
-		assertEquals("Stack[0x0]:8", parameters[1].getVariableStorage().toString());
-		assertParameters(p3, parameters[2], false);
-		assertEquals("r11:1", parameters[2].getVariableStorage().toString());
+		assertParameter(p2, parameters[1], false);
+		assertEquals(1, parameters[1].getOrdinal());
+		assertEquals("r11:4 (auto)", parameters[1].getVariableStorage().toString());
+		assertParameter(p3, parameters[2], false);
+		assertEquals(2, parameters[2].getOrdinal());
+		assertEquals("Stack[0x0]:8", parameters[2].getVariableStorage().toString());
+		assertParameter(p4, parameters[3], false);
+		assertEquals(3, parameters[3].getOrdinal());
+		assertEquals("r10l:1", parameters[3].getVariableStorage().toString());
 
 	}
 
@@ -908,14 +976,14 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		ParameterImpl thisParam = new ParameterImpl(Function.THIS_PARAM_NAME,
 			new PointerDataType(classStruct), VariableStorage.UNASSIGNED_STORAGE, program);
 
-		assertParameters(p1, parameters[0], false);
+		assertParameter(p1, parameters[0], false);
 		assertEquals("r12:4 (auto)", parameters[0].getVariableStorage().toString());
-		assertParameters(thisParam, parameters[1], false);
+		assertParameter(thisParam, parameters[1], false);
 		assertEquals("r11:4 (auto)", parameters[1].getVariableStorage().toString());
-		assertParameters(p2, parameters[2], false);
+		assertParameter(p2, parameters[2], false);
 		assertEquals("Stack[0x0]:8", parameters[2].getVariableStorage().toString());
-		assertParameters(p3, parameters[3], false);
-		assertEquals("r10:1", parameters[3].getVariableStorage().toString());
+		assertParameter(p3, parameters[3], false);
+		assertEquals("r10l:1", parameters[3].getVariableStorage().toString());
 
 		// try again with DB params
 
@@ -933,14 +1001,18 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		parameters = f.getParameters();
 		assertEquals(4, parameters.length);
 
-		assertParameters(p1, parameters[0], false);
+		assertParameter(p1, parameters[0], false);
+		assertEquals(0, parameters[0].getOrdinal());
 		assertEquals("r12:4 (auto)", parameters[0].getVariableStorage().toString());
-		assertParameters(thisParam, parameters[1], false);
+		assertParameter(thisParam, parameters[1], false);
+		assertEquals(1, parameters[1].getOrdinal());
 		assertEquals("r11:4 (auto)", parameters[1].getVariableStorage().toString());
-		assertParameters(p2, parameters[2], false);
+		assertParameter(p2, parameters[2], false);
+		assertEquals(2, parameters[2].getOrdinal());
 		assertEquals("Stack[0x0]:8", parameters[2].getVariableStorage().toString());
-		assertParameters(p3, parameters[3], false);
-		assertEquals("r10:1", parameters[3].getVariableStorage().toString());
+		assertParameter(p3, parameters[3], false);
+		assertEquals(3, parameters[3].getOrdinal());
+		assertEquals("r10l:1", parameters[3].getVariableStorage().toString());
 
 		// try again with DB params and custom storage
 
@@ -951,20 +1023,24 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		assertEquals("__thiscall", f.getCallingConventionName());
 
 		return1 = f.getReturn();
-		assertParameters(returnVar, return1, false);
+		assertParameter(returnVar, return1, false);
 		assertEquals("r12:4", return1.getVariableStorage().toString());
 
 		parameters = f.getParameters();
 		assertEquals(4, parameters.length);
 
-		assertParameters(p1, parameters[0], false);
+		assertParameter(p1, parameters[0], false);
+		assertEquals(0, parameters[0].getOrdinal());
 		assertEquals("r12:4", parameters[0].getVariableStorage().toString());
-		assertParameters(thisParam, parameters[1], false);
+		assertParameter(thisParam, parameters[1], false);
+		assertEquals(1, parameters[1].getOrdinal());
 		assertEquals("r11:4", parameters[1].getVariableStorage().toString());
-		assertParameters(p2, parameters[2], false);
+		assertParameter(p2, parameters[2], false);
+		assertEquals(2, parameters[2].getOrdinal());
 		assertEquals("Stack[0x0]:8", parameters[2].getVariableStorage().toString());
-		assertParameters(p3, parameters[3], false);
-		assertEquals("r10:1", parameters[3].getVariableStorage().toString());
+		assertParameter(p3, parameters[3], false);
+		assertEquals(3, parameters[3].getOrdinal());
+		assertEquals("r10l:1", parameters[3].getVariableStorage().toString());
 
 	}
 
@@ -1141,7 +1217,7 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 	@Test
 	public void testDataTypeOnRegisterVariable() throws Exception {
 
-		Register reg = program.getProgramContext().getRegister("r7");
+		Register reg = program.getProgramContext().getRegister("r7l");
 		assertNotNull(reg);
 
 		Function f = createFunction("foo", addr(100), new AddressSet(addr(100), addr(200)));
@@ -1155,11 +1231,13 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 
 		int localTransactionID = program.startTransaction("test");
 		try {
-			bdt = (ByteDataType) program.getDataTypeManager().addDataType(bdt,
-				DataTypeConflictHandler.DEFAULT_HANDLER);
+			bdt = (ByteDataType) program.getDataTypeManager()
+					.addDataType(bdt,
+						DataTypeConflictHandler.DEFAULT_HANDLER);
 			td = new TypedefDataType("byteTD", bdt);
-			td = (TypeDef) program.getDataTypeManager().addDataType(td,
-				DataTypeConflictHandler.DEFAULT_HANDLER);
+			td = (TypeDef) program.getDataTypeManager()
+					.addDataType(td,
+						DataTypeConflictHandler.DEFAULT_HANDLER);
 			AddRegisterParameterCommand cmd = new AddRegisterParameterCommand(f, reg, "reg_param_0",
 				td, 0, SourceType.USER_DEFINED);
 			cmd.applyTo(program);
@@ -1365,7 +1443,7 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		stackVar.setComment("My Comment0");
 		f.addLocalVariable(stackVar, SourceType.USER_DEFINED);
 
-		dt = (Structure) dt.clone(program.getDataTypeManager());
+		dt = dt.clone(program.getDataTypeManager());
 		dt.add(WordDataType.dataType);
 
 		f = functionManager.getFunctionAt(addr(100));
@@ -1429,12 +1507,12 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		f.setCustomVariableStorage(true);
 
 		DataType[] dt =
-			new DataType[] { new ByteDataType(), new WordDataType(), new Pointer16DataType() };
+			new DataType[] { new LongDataType(), new WordDataType(), new Pointer16DataType() };
 
 		Register[] regs =
 			new Register[] { functionManager.getProgram().getProgramContext().getRegister("r1"),
-				functionManager.getProgram().getProgramContext().getRegister("r2"),
-				functionManager.getProgram().getProgramContext().getRegister("r3") };
+				functionManager.getProgram().getProgramContext().getRegister("r2l"),
+				functionManager.getProgram().getProgramContext().getRegister("r3l") };
 
 		LocalVariableImpl regVar = new LocalVariableImpl("TestReg0", 0, dt[0], regs[0], program);
 		regVar.setComment("My Comment0");
@@ -1468,12 +1546,12 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		f.setCustomVariableStorage(true);
 
 		DataType[] dt =
-			new DataType[] { new ByteDataType(), new WordDataType(), new Pointer16DataType() };
+			new DataType[] { new LongDataType(), new WordDataType(), new Pointer16DataType() };
 
 		Register[] regs =
 			new Register[] { functionManager.getProgram().getProgramContext().getRegister("r1"),
-				functionManager.getProgram().getProgramContext().getRegister("r2"),
-				functionManager.getProgram().getProgramContext().getRegister("r1")
+				functionManager.getProgram().getProgramContext().getRegister("r2l"),
+				functionManager.getProgram().getProgramContext().getRegister("r1l")
 			// same address as regs[0]
 			};
 
@@ -1509,12 +1587,12 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		Function f = createFunction("foo", addr(100), new AddressSet(addr(100), addr(200)));
 
 		DataType[] dt =
-			new DataType[] { new ByteDataType(), new WordDataType(), new Pointer16DataType() };
+			new DataType[] { new LongDataType(), new WordDataType(), new Pointer16DataType() };
 
 		Register[] regs =
 			new Register[] { functionManager.getProgram().getProgramContext().getRegister("r1"),
-				functionManager.getProgram().getProgramContext().getRegister("r1"),
-				functionManager.getProgram().getProgramContext().getRegister("r3") };
+				functionManager.getProgram().getProgramContext().getRegister("r1l"),
+				functionManager.getProgram().getProgramContext().getRegister("r3l") };
 
 		LocalVariableImpl regVar = new LocalVariableImpl("TestReg0", 0, dt[0], regs[0], program);
 		regVar.setComment("My Comment0");
@@ -1551,9 +1629,9 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 			new DataType[] { new ByteDataType(), new WordDataType(), new Pointer16DataType() };
 
 		Register[] regs =
-			new Register[] { functionManager.getProgram().getProgramContext().getRegister("r1"),
-				functionManager.getProgram().getProgramContext().getRegister("r1"),
-				functionManager.getProgram().getProgramContext().getRegister("r3") };
+			new Register[] { functionManager.getProgram().getProgramContext().getRegister("r1l"),
+				functionManager.getProgram().getProgramContext().getRegister("r1l"),
+				functionManager.getProgram().getProgramContext().getRegister("r3l") };
 
 		LocalVariableImpl regVar = new LocalVariableImpl("TestReg0", 4, dt[0], regs[0], program);
 		regVar.setComment("My Comment0");
@@ -1659,12 +1737,12 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		f.setCustomVariableStorage(true);
 
 		DataType[] dt =
-			new DataType[] { new ByteDataType(), new WordDataType(), new Pointer16DataType() };
+			new DataType[] { new LongDataType(), new WordDataType(), new Pointer16DataType() };
 
 		Register[] regs =
 			new Register[] { functionManager.getProgram().getProgramContext().getRegister("r1"),
-				functionManager.getProgram().getProgramContext().getRegister("r2"),
-				functionManager.getProgram().getProgramContext().getRegister("r3") };
+				functionManager.getProgram().getProgramContext().getRegister("r2l"),
+				functionManager.getProgram().getProgramContext().getRegister("r3l") };
 
 		LocalVariableImpl regVar = new LocalVariableImpl("TestReg0", 0, dt[0], regs[0], program);
 		regVar.setComment("My Comment0");
@@ -2002,8 +2080,10 @@ public class FunctionDBTest extends AbstractGhidraHeadedIntegrationTest implemen
 		assertNotNull(symbolTable.getGlobalSymbol("LAB_TestA", addr(220)));
 		assertNotNull(symbolTable.getGlobalSymbol("LAB_Test", addr(224)));
 
-		assertTrue(program.getSymbolTable().getPrimarySymbol(
-			addr(201)).getSymbolType() != SymbolType.FUNCTION);
+		assertTrue(program.getSymbolTable()
+				.getPrimarySymbol(
+					addr(201))
+				.getSymbolType() != SymbolType.FUNCTION);
 	}
 
 }

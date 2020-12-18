@@ -24,11 +24,13 @@ import javax.swing.ImageIcon;
 import docking.action.MenuData;
 import docking.action.ToolBarData;
 import ghidra.framework.client.ClientUtil;
-import ghidra.framework.main.datatable.DomainFileProvider;
+import ghidra.framework.main.datatable.DomainFileContext;
 import ghidra.framework.main.datatree.UndoActionDialog;
 import ghidra.framework.model.DomainFile;
 import ghidra.framework.plugintool.Plugin;
+import ghidra.util.Msg;
 import ghidra.util.exception.CancelledException;
+import ghidra.util.exception.FileInUseException;
 import ghidra.util.task.Task;
 import ghidra.util.task.TaskMonitor;
 import resources.ResourceManager;
@@ -55,7 +57,7 @@ public class VersionControlUndoCheckOutAction extends VersionControlAction {
 	}
 
 	@Override
-	public void actionPerformed(DomainFileProvider context) {
+	public void actionPerformed(DomainFileContext context) {
 		undoCheckOut(context.getSelectedFiles());
 	}
 
@@ -63,7 +65,7 @@ public class VersionControlUndoCheckOutAction extends VersionControlAction {
 	 * Returns true if at least one of the provided domain files is checked out from the repository.
 	 */
 	@Override
-	public boolean isEnabledForContext(DomainFileProvider context) {
+	public boolean isEnabledForContext(DomainFileContext context) {
 		List<DomainFile> domainFiles = context.getSelectedFiles();
 		for (DomainFile domainFile : domainFiles) {
 			if (domainFile.isCheckedOut()) {
@@ -176,6 +178,10 @@ public class VersionControlUndoCheckOutAction extends VersionControlAction {
 			}
 			catch (CancelledException e) {
 				tool.setStatusInfo("Undo check out was canceled");
+			}
+			catch (FileInUseException e) {
+				Msg.showError(this, null, "Action Failed",
+					"Unable to Undo Checkout while file(s) are open or in use");
 			}
 			catch (IOException e) {
 				ClientUtil.handleException(repository, e, "Undo Check Out", tool.getToolFrame());

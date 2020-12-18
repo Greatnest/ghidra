@@ -16,12 +16,12 @@
 package ghidra.program.database.mem;
 
 import java.io.IOException;
-import java.util.List;
 
 import db.Record;
 import ghidra.program.database.map.AddressMapDB;
 import ghidra.program.model.address.*;
-import ghidra.program.model.mem.*;
+import ghidra.program.model.mem.MemoryAccessException;
+import ghidra.program.model.mem.MemoryBlockType;
 
 /**
  * Class for handling byte mapped memory sub blocks
@@ -30,14 +30,23 @@ class ByteMappedSubMemoryBlock extends SubMemoryBlock {
 
 	private final MemoryMapDB memMap;
 	private final Address mappedAddress;
+	private final ByteMappingScheme byteMappingScheme;
+
 	private boolean ioPending;
 
 	ByteMappedSubMemoryBlock(MemoryMapDBAdapter adapter, Record record) {
 		super(adapter, record);
 		this.memMap = adapter.getMemoryMap();
 		AddressMapDB addressMap = memMap.getAddressMap();
+		// TODO: ensure that mappedAddress is aligned with addressMask (trailing 0's of mask should be 0 in mappedAddress)
 		mappedAddress = addressMap.decodeAddress(
-			record.getLongValue(MemoryMapDBAdapter.SUB_SOURCE_OFFSET_COL), false);
+			record.getLongValue(MemoryMapDBAdapter.SUB_LONG_DATA2_COL), false);
+		int encodedMappingScheme = record.getIntValue(MemoryMapDBAdapter.SUB_INT_DATA1_COL);
+		byteMappingScheme = new ByteMappingScheme(encodedMappingScheme);
+	}
+
+	ByteMappingScheme getByteMappingScheme() {
+		return byteMappingScheme;
 	}
 
 	@Override
@@ -46,13 +55,16 @@ class ByteMappedSubMemoryBlock extends SubMemoryBlock {
 	}
 
 	@Override
-	public byte getByte(long offset) throws MemoryAccessException, IOException {
+	public byte getByte(long offsetInMemBlock) throws MemoryAccessException, IOException {
+		long offsetInSubBlock = offsetInMemBlock - subBlockOffset;
 		if (ioPending) {
 			new MemoryAccessException("Cyclic Access");
 		}
 		try {
 			ioPending = true;
-			return memMap.getByte(mappedAddress.addNoWrap(offset - startingOffset));
+			Address sourceAddr =
+				byteMappingScheme.getMappedSourceAddress(mappedAddress, offsetInSubBlock);
+			return memMap.getByte(sourceAddr);
 		}
 		catch (AddressOverflowException e) {
 			throw new MemoryAccessException("No memory at address");
@@ -63,15 +75,18 @@ class ByteMappedSubMemoryBlock extends SubMemoryBlock {
 	}
 
 	@Override
-	public int getBytes(long offset, byte[] b, int off, int len)
+	public int getBytes(long offsetInMemBlock, byte[] b, int off, int len)
 			throws MemoryAccessException, IOException {
+		long offsetInSubBlock = offsetInMemBlock - subBlockOffset;
+		long available = subBlockLength - offsetInSubBlock;
+		// TODO: should array length be considered?
+		len = (int) Math.min(len, available);
 		if (ioPending) {
 			new MemoryAccessException("Cyclic Access");
 		}
 		try {
 			ioPending = true;
-			len = (int) Math.min(len, length - (offset - startingOffset));
-			return memMap.getBytes(mappedAddress.addNoWrap(offset), b, off, len);
+			return byteMappingScheme.getBytes(memMap, mappedAddress, offsetInSubBlock, b, off, len);
 		}
 		catch (AddressOverflowException e) {
 			throw new MemoryAccessException("No memory at address");
@@ -82,13 +97,16 @@ class ByteMappedSubMemoryBlock extends SubMemoryBlock {
 	}
 
 	@Override
-	public void putByte(long offset, byte b) throws MemoryAccessException, IOException {
+	public void putByte(long offsetInMemBlock, byte b) throws MemoryAccessException, IOException {
+		long offsetInSubBlock = offsetInMemBlock - subBlockOffset;
 		try {
 			if (ioPending) {
 				new MemoryAccessException("Cyclic Access");
 			}
 			ioPending = true;
-			memMap.setByte(mappedAddress.addNoWrap(offset - startingOffset), b);
+			Address sourceAddr =
+				byteMappingScheme.getMappedSourceAddress(mappedAddress, offsetInSubBlock);
+			memMap.setByte(sourceAddr, b);
 		}
 		catch (AddressOverflowException e) {
 			throw new MemoryAccessException("No memory at address");
@@ -100,15 +118,17 @@ class ByteMappedSubMemoryBlock extends SubMemoryBlock {
 	}
 
 	@Override
-	public int putBytes(long offset, byte[] b, int off, int len)
+	public int putBytes(long offsetInMemBlock, byte[] b, int off, int len)
 			throws MemoryAccessException, IOException {
+		long offsetInSubBlock = offsetInMemBlock - subBlockOffset;
+		long available = subBlockLength - offsetInSubBlock;
+		len = (int) Math.min(len, available);
 		try {
 			if (ioPending) {
 				new MemoryAccessException("Cyclic Access");
 			}
 			ioPending = true;
-			len = (int) Math.min(len, length - (offset - startingOffset));
-			memMap.setBytes(mappedAddress.addNoWrap(offset - startingOffset), b, off, len);
+			byteMappingScheme.setBytes(memMap, mappedAddress, offsetInSubBlock, b, off, len);
 			return len;
 		}
 		catch (AddressOverflowException e) {
@@ -119,8 +139,16 @@ class ByteMappedSubMemoryBlock extends SubMemoryBlock {
 		}
 	}
 
-	public AddressRange getMappedRange() {
-		Address endMappedAddress = mappedAddress.add(length - 1);
+	AddressRange getMappedRange() {
+		Address endMappedAddress;
+		try {
+			endMappedAddress =
+				byteMappingScheme.getMappedSourceAddress(mappedAddress, subBlockLength - 1);
+		}
+		catch (AddressOverflowException e) {
+			// keep things happy
+			endMappedAddress = mappedAddress.getAddressSpace().getMaxAddress();
+		}
 		return new AddressRangeImpl(mappedAddress, endMappedAddress);
 	}
 
@@ -141,11 +169,22 @@ class ByteMappedSubMemoryBlock extends SubMemoryBlock {
 
 	@Override
 	protected SubMemoryBlock split(long memBlockOffset) throws IOException {
+
+		// NOTE - GUI does not support any split of any byte-mapped blocks although API does.  
+		//        Not sure we really need to support it for byte-mapped block.
+
+		if (!byteMappingScheme.isOneToOneMapping()) {
+			// byte-mapping scheme alignment restrictions would apply to split 
+			// boundary if we were to support
+			throw new UnsupportedOperationException(
+				"split not supported for byte-mapped block with " + byteMappingScheme);
+		}
+
 		// convert from offset in block to offset in this sub block
-		int offset = (int) (memBlockOffset - startingOffset);
-		long newLength = length - offset;
-		length = offset;
-		record.setLongValue(MemoryMapDBAdapter.SUB_LENGTH_COL, length);
+		int offset = (int) (memBlockOffset - subBlockOffset);
+		long newLength = subBlockLength - offset;
+		subBlockLength = offset;
+		record.setLongValue(MemoryMapDBAdapter.SUB_LENGTH_COL, subBlockLength);
 		adapter.updateSubBlockRecord(record);
 
 		Address newAddr = mappedAddress.add(offset);
@@ -160,45 +199,7 @@ class ByteMappedSubMemoryBlock extends SubMemoryBlock {
 
 	@Override
 	protected String getDescription() {
-		return "Byte Mapped: " + mappedAddress;
-	}
-
-	@Override
-	protected ByteSourceRangeList getByteSourceRangeList(MemoryBlock block, Address start,
-			long offset, long size) {
-		ByteSourceRangeList result = new ByteSourceRangeList();
-		long relativeOffset = offset - startingOffset;
-		Address startAddress = mappedAddress.add(relativeOffset);
-		Address endAddress = startAddress.add(size - 1);
-		List<MemoryBlockDB> blocks = memMap.getBlocks(startAddress, endAddress);
-		for (MemoryBlockDB mappedBlock : blocks) {
-			Address startInBlock = max(mappedBlock.getStart(), startAddress);
-			Address endInBlock = min(mappedBlock.getEnd(), endAddress);
-			AddressRange blockRange = new AddressRangeImpl(startInBlock, endInBlock);
-			ByteSourceRangeList ranges =
-				mappedBlock.getByteSourceRangeList(startInBlock, blockRange.getLength());
-			for (ByteSourceRange bsRange : ranges) {
-				result.add(translate(block, bsRange, start, relativeOffset));
-			}
-		}
-		return result;
-	}
-
-	private ByteSourceRange translate(MemoryBlock block, ByteSourceRange bsRange, Address addr,
-			long relativeOffset) {
-		Address mappedStart = bsRange.getStart();
-		long offset = mappedStart.subtract(mappedAddress);
-		Address start = addr.add(offset - relativeOffset);
-		return new ByteSourceRange(block, start, bsRange.getSize(), bsRange.getSourceId(),
-			bsRange.getOffset());
-	}
-
-	Address min(Address a1, Address a2) {
-		return a1.compareTo(a2) <= 0 ? a1 : a2;
-	}
-
-	Address max(Address a1, Address a2) {
-		return a1.compareTo(a2) >= 0 ? a1 : a2;
+		return "Byte Mapped: " + mappedAddress + ", " + byteMappingScheme;
 	}
 
 }

@@ -33,6 +33,7 @@ import ghidra.framework.remote.security.SSHKeyManager;
 import ghidra.net.*;
 import ghidra.util.*;
 import ghidra.util.exception.AssertException;
+import ghidra.util.exception.UserAccessException;
 import ghidra.util.task.TaskLauncher;
 
 /**
@@ -84,8 +85,6 @@ public class ClientUtil {
 	 * @param host server name or address
 	 * @param port server port, 0 indicates that default port should be used.
 	 * @return repository server adapter
-	 * @throws LoginException thrown if server fails to authenticate user or
-	 * general access is denied.
 	 */
 	public static RepositoryServerAdapter getRepositoryServer(String host, int port) {
 		return getRepositoryServer(host, port, false);
@@ -100,8 +99,6 @@ public class ClientUtil {
 	 * @param forceConnect if true and the server adapter is disconnected, an
 	 * attempt will be made to reconnect.
 	 * @return repository server handle
-	 * @throws LoginException thrown if server fails to authenticate user or
-	 * general access is denied.
 	 */
 	public static RepositoryServerAdapter getRepositoryServer(String host, int port,
 			boolean forceConnect) {
@@ -175,7 +172,13 @@ public class ClientUtil {
 	 * should be obtained from RepositoryServerAdapter.getUser
 	 */
 	public static String getUserName() {
-		return SystemUtilities.getUserName();
+		String name = SystemUtilities.getUserName();
+		// exclude domain prefix which may be included
+		int slashIndex = name.lastIndexOf('\\');
+		if (slashIndex >= 0) {
+			name = name.substring(slashIndex + 1);
+		}
+		return name;
 	}
 
 	/**
@@ -202,6 +205,10 @@ public class ClientUtil {
 		if ((exc instanceof ConnectException) || (exc instanceof NotConnectedException)) {
 			Msg.debug(ClientUtil.class, "Server not connected (" + operation + ")");
 			promptForReconnect(repository, operation, mustRetry, parent);
+		}
+		else if (exc instanceof UserAccessException) {
+			Msg.showError(ClientUtil.class, parent, title,
+				"Access denied: " + repository + "\n" + exc.getMessage());
 		}
 		else if ((exc instanceof ServerException) || (exc instanceof ServerError)) {
 			Msg.showError(ClientUtil.class, parent, title,

@@ -18,8 +18,6 @@ package ghidra.program.database.mem;
 import java.io.IOException;
 
 import db.Record;
-import ghidra.program.model.address.Address;
-import ghidra.program.model.address.AddressRange;
 import ghidra.program.model.mem.*;
 
 /**
@@ -30,14 +28,14 @@ abstract class SubMemoryBlock implements Comparable<SubMemoryBlock> {
 
 	protected final MemoryMapDBAdapter adapter;
 	protected final Record record;
-	protected long length;
-	protected long startingOffset;
+	protected long subBlockLength;
+	protected long subBlockOffset;
 
 	protected SubMemoryBlock(MemoryMapDBAdapter adapter, Record record) {
 		this.adapter = adapter;
 		this.record = record;
-		this.startingOffset = record.getLongValue(MemoryMapDBAdapter.SUB_START_OFFSET_COL);
-		this.length = record.getLongValue(MemoryMapDBAdapter.SUB_LENGTH_COL);
+		this.subBlockOffset = record.getLongValue(MemoryMapDBAdapter.SUB_START_OFFSET_COL);
+		this.subBlockLength = record.getLongValue(MemoryMapDBAdapter.SUB_LENGTH_COL);
 	}
 
 	/**
@@ -62,7 +60,7 @@ abstract class SubMemoryBlock implements Comparable<SubMemoryBlock> {
 	 * @return the starting offset for this sub block.
 	 */
 	public final long getStartingOffset() {
-		return startingOffset;
+		return subBlockOffset;
 	}
 
 	/**
@@ -70,7 +68,7 @@ abstract class SubMemoryBlock implements Comparable<SubMemoryBlock> {
 	 * @return the length of this sub block
 	 */
 	public final long getLength() {
-		return length;
+		return subBlockLength;
 	}
 
 	/**
@@ -80,7 +78,8 @@ abstract class SubMemoryBlock implements Comparable<SubMemoryBlock> {
 	 * @return true if the offset is valid for this block
 	 */
 	public final boolean contains(long memBlockOffset) {
-		return memBlockOffset >= startingOffset && memBlockOffset < startingOffset + length;
+		return (memBlockOffset >= subBlockOffset) &&
+			(memBlockOffset < subBlockOffset + subBlockLength);
 	}
 
 	/**
@@ -158,7 +157,7 @@ abstract class SubMemoryBlock implements Comparable<SubMemoryBlock> {
 	 * @throws IOException if a database error occurs
 	 */
 	protected void setLength(long length) throws IOException {
-		this.length = length;
+		this.subBlockLength = length;
 		record.setLongValue(MemoryMapDBAdapter.SUB_LENGTH_COL, length);
 		adapter.updateSubBlockRecord(record);
 	}
@@ -182,11 +181,13 @@ abstract class SubMemoryBlock implements Comparable<SubMemoryBlock> {
 	}
 
 	/**
-	 * Get the {@link MemoryBlockType} for this block: TYPE_DEFAULT, TYPE_OVERLAY, TYPE_BIT_MAPPED, or TYPE_BYTE_MAPPED
+	 * Get the {@link MemoryBlockType} for this block: DEFAULT, BIT_MAPPED, or BYTE_MAPPED
 	 * 
-	 * @return the type for this block: TYPE_DEFAULT, TYPE_OVERLAY, TYPE_BIT_MAPPED, or TYPE_BYTE_MAPPED
+	 * @return the type for this block: DEFAULT, BIT_MAPPED, or BYTE_MAPPED
 	 */
-	protected abstract MemoryBlockType getType();
+	protected MemoryBlockType getType() {
+		return MemoryBlockType.DEFAULT;
+	}
 
 	/**
 	 * Returns the {@link MemoryBlockSourceInfo} object for this SubMemoryBlock
@@ -216,7 +217,7 @@ abstract class SubMemoryBlock implements Comparable<SubMemoryBlock> {
 	 * @throws IOException if a database error occurs.
 	 */
 	protected void setParentIdAndStartingOffset(long key, long startingOffset) throws IOException {
-		this.startingOffset = startingOffset;
+		this.subBlockOffset = startingOffset;
 		record.setLongValue(MemoryMapDBAdapter.SUB_PARENT_ID_COL, key);
 		record.setLongValue(MemoryMapDBAdapter.SUB_START_OFFSET_COL, startingOffset);
 		adapter.updateSubBlockRecord(record);
@@ -236,18 +237,6 @@ abstract class SubMemoryBlock implements Comparable<SubMemoryBlock> {
 	protected boolean uses(FileBytes fileBytes) {
 		return false;
 	}
-
-	/**
-	 * Gets the list of BytesSourceRanges from this sub block for the given memBlockOffset and associates
-	 * it with the given {@link AddressRange}
-	 * @param block the {@link MemoryBlock} that generated the BytesSourceSet.
-	 * @param start the program address for which to get a ByteSourceSet
-	 * @param memBlockOffset the offset from the beginning of the containing MemoryBlock.
-	 * @param size the size of region to get byte sources
-	 * @return the set of ByteSourceRanges which maps program addresses to byte source locations.
-	 */
-	protected abstract ByteSourceRangeList getByteSourceRangeList(MemoryBlock block, Address start,
-			long memBlockOffset, long size);
 
 	@Override
 	public int compareTo(SubMemoryBlock o) {

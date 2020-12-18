@@ -21,7 +21,8 @@ import java.util.List;
 import javax.swing.Icon;
 
 import docking.ActionContext;
-import docking.action.*;
+import docking.action.DockingAction;
+import docking.action.MenuData;
 import ghidra.app.CorePluginPackage;
 import ghidra.app.context.ListingActionContext;
 import ghidra.app.plugin.PluginCategoryNames;
@@ -70,6 +71,7 @@ public class CallTreePlugin extends ProgramPlugin {
 
 		createActions();
 		primaryProvider = new CallTreeProvider(this, true);
+		providers.add(primaryProvider);
 	}
 
 	@Override
@@ -108,8 +110,12 @@ public class CallTreePlugin extends ProgramPlugin {
 		}
 	}
 
-	private CallTreeProvider findProviderForLocation(ProgramLocation location) {
+	CallTreeProvider findTransientProviderForLocation(ProgramLocation location) {
 		for (CallTreeProvider provider : providers) {
+			if (!provider.isTransient()) {
+				continue;
+			}
+
 			if (provider.isShowingLocation(location)) {
 				return provider;
 			}
@@ -120,9 +126,9 @@ public class CallTreePlugin extends ProgramPlugin {
 	private void createActions() {
 
 		// use the name of the provider so that the shared key binding data will get used
-		String actionName = CallTreeProvider.TITLE;
+		String actionName = "Static Function Call Trees";
 		showCallTreeFromMenuAction =
-			new DockingAction(actionName, getName(), KeyBindingType.SHARED) {
+			new DockingAction(actionName, getName()) {
 				@Override
 				public void actionPerformed(ActionContext context) {
 					showOrCreateNewCallTree(currentLocation);
@@ -138,6 +144,8 @@ public class CallTreePlugin extends ProgramPlugin {
 			new String[] { "References", "Show Call Trees" }, PROVIDER_ICON, "ShowReferencesTo"));
 		showCallTreeFromMenuAction.setHelpLocation(
 			new HelpLocation("CallTreePlugin", "Call_Tree_Plugin"));
+		showCallTreeFromMenuAction.setDescription("Shows the Function Call Trees window for the " +
+			"item under the cursor.  The new window will not change along with the Listing cursor.");
 		tool.addAction(showCallTreeFromMenuAction);
 	}
 
@@ -177,7 +185,7 @@ public class CallTreePlugin extends ProgramPlugin {
 			return; // no program; cannot show tool
 		}
 
-		CallTreeProvider provider = findProviderForLocation(location);
+		CallTreeProvider provider = findTransientProviderForLocation(location);
 		if (provider != null) {
 			tool.showComponentProvider(provider, true);
 			return;

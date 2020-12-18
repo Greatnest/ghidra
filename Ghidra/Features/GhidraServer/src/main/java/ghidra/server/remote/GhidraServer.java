@@ -158,11 +158,9 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 		}
 
 		boolean supportLocalPasswords = false;
-		boolean requireExplicitPasswordReset = true;
 		switch (authMode) {
 			case PASSWORD_FILE_LOGIN:
 				supportLocalPasswords = true;
-				requireExplicitPasswordReset = false;
 				authModule = new PasswordFileAuthenticationModule(allowUserToSpecifyName);
 				break;
 			case PKI_LOGIN:
@@ -199,8 +197,8 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 			sshAuthModule = new SSHAuthenticationModule(allowUserToSpecifyName);
 		}
 
-		mgr = new RepositoryManager(rootDir, supportLocalPasswords, requireExplicitPasswordReset,
-			defaultPasswordExpirationDays, allowAnonymousAccess);
+		mgr = new RepositoryManager(rootDir, supportLocalPasswords, defaultPasswordExpirationDays,
+			allowAnonymousAccess);
 
 		GhidraServer.server = this;
 
@@ -529,10 +527,22 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 		String rootPath = null;
 		int defaultPasswordExpiration = -1;
 		boolean autoProvision = false;
-		String jaasConfigFileStr = null;
+		File jaasConfigFile = null;
 
 		// Network name resolution disabled by default
 		InetNameLookup.setLookupEnabled(false);
+
+		// Initialize application
+		try {
+			ApplicationLayout layout = new GhidraServerApplicationLayout();
+			ApplicationConfiguration configuration = new ApplicationConfiguration();
+			configuration.setInitializeLogging(false);
+			Application.initializeApplication(layout, configuration);
+		}
+		catch (IOException e) {
+			System.err.println("Failed to initialize the application!");
+			System.exit(-1);
+		}
 
 		// Process command line options
 		for (int i = 0; i < args.length; i++) {
@@ -634,15 +644,27 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 					System.out.println("Default password expiration has been disbaled.");
 				}
 			}
-			else if (s.equals("-jaas")) {
-				int nextArgIndex = i + 1;
-				if (!(nextArgIndex < args.length - 1)) {
-					// length - 1 -> don't count mandatory repo path, which is always last arg
+			else if (s.startsWith("-jaas")) {
+				String jaasConfigFileStr;
+				if (s.length() == 5) {
+					i++;
+					jaasConfigFileStr = (i < args.length) ? args[i] : "";
+				}
+				else {
+					jaasConfigFileStr = s.substring(5);
+				}
+				jaasConfigFileStr = jaasConfigFileStr.trim();
+				if (jaasConfigFileStr.isEmpty()) {
 					displayUsage("Missing -jaas config file path argument");
 					System.exit(-1);
 				}
-				jaasConfigFileStr = args[nextArgIndex];
-				i++;
+				jaasConfigFile = getServerCfgFile(jaasConfigFileStr);
+				if (!jaasConfigFile.isFile()) {
+					displayUsage(
+						"JAAS config file (-jaas <configfile>) does not exist or is not file: " +
+							jaasConfigFile.getAbsolutePath());
+					System.exit(-1);
+				}
 			}
 			else if (s.equals("-autoProvision")) {
 				autoProvision = true;
@@ -661,18 +683,6 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 			System.exit(-1);
 		}
 
-		// Initialize application
-		try {
-			ApplicationLayout layout = new GhidraServerApplicationLayout();
-			ApplicationConfiguration configuration = new ApplicationConfiguration();
-			configuration.setInitializeLogging(false);
-			Application.initializeApplication(layout, configuration);
-		}
-		catch (IOException e) {
-			System.err.println("Failed to initialize the application!");
-			System.exit(-1);
-		}
-
 		File serverRoot = new File(rootPath);
 		if (!serverRoot.isAbsolute()) {
 			ResourceFile installRoot = Application.getInstallationDirectory();
@@ -683,17 +693,9 @@ public class GhidraServer extends UnicastRemoteObject implements GhidraServerHan
 			serverRoot = new File(installRoot.getFile(false), rootPath);
 		}
 
-		File jaasConfigFile = null;
 		if (authMode == JAAS_LOGIN) {
-			if (jaasConfigFileStr == null) {
+			if (jaasConfigFile == null) {
 				displayUsage("JAAS config file argument (-jaas <configfile>) not specified");
-				System.exit(-1);
-			}
-			jaasConfigFile = getServerCfgFile(jaasConfigFileStr);
-			if (!jaasConfigFile.isFile()) {
-				displayUsage(
-					"JAAS config file (-jaas <configfile>) does not exist or is not file: " +
-						jaasConfigFile.getAbsolutePath());
 				System.exit(-1);
 			}
 		}

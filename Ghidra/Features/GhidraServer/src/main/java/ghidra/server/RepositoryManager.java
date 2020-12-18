@@ -52,11 +52,16 @@ public class RepositoryManager {
 	 * @param rootDir directory where repositories will be created; this
 	 * path contains a list of users that can access the repositories 
 	 * being managed.
-	 * @throws IOException
+	 * @param enableLocalPasswords if true user passwords will be maintained 
+	 * 			within local 'users' file
+	 * @param defaultPasswordExpirationDays password expiration in days when 
+	 * 			local passwords are enabled (0 = no expiration)
+	 * @param anonymousAccessAllowed if true server permits anonymous access
+	 * to repositories.  
+	 * @throws IOException if IO error occurs
 	 */
-	public RepositoryManager(File rootDir, boolean supportLocalPasswords,
-			boolean requireExplicitPasswordReset, int defaultPasswordExpirationDays,
-			boolean anonymousAccessAllowed) throws IOException {
+	public RepositoryManager(File rootDir, boolean enableLocalPasswords,
+			int defaultPasswordExpirationDays, boolean anonymousAccessAllowed) throws IOException {
 		rootDirFile = rootDir;
 		log.info("Instantiating Repository Manager for " + rootDirFile.getAbsolutePath());
 		if (!rootDirFile.isDirectory()) {
@@ -66,8 +71,7 @@ public class RepositoryManager {
 			throw new IOException(rootDirFile + " can not be written to");
 		}
 		this.anonymousAccessAllowed = anonymousAccessAllowed;
-		this.userMgr = new UserManager(this, supportLocalPasswords, requireExplicitPasswordReset,
-			defaultPasswordExpirationDays);
+		this.userMgr = new UserManager(this, enableLocalPasswords, defaultPasswordExpirationDays);
 		repositoryMap = new HashMap<>();
 		initialize();
 	}
@@ -121,7 +125,7 @@ public class RepositoryManager {
 
 		validateUser(currentUser);
 
-		if (!NamingUtilities.isValidName(name)) {
+		if (!NamingUtilities.isValidProjectName(name)) {
 			throw new IOException("Invalid repository name: " + name);
 		}
 		if (repositoryMap.containsKey(name)) {
@@ -225,7 +229,11 @@ public class RepositoryManager {
 	}
 
 	/**
-	 * Return array of users known to this manager.
+	 * Get all defined users. If currentUser is an
+	 * Anonymous user an empty array will be returned.
+	 * @param currentUser current user
+	 * @return array of users known to this manager or empty array if 
+	 * we should not reveal to currentUser.
 	 */
 	public synchronized String[] getAllUsers(String currentUser) throws IOException {
 		if (isAnonymousUser(currentUser)) {
@@ -240,9 +248,6 @@ public class RepositoryManager {
 		}
 	}
 
-	/**
-	 * Returns UserManager object
-	 */
 	public UserManager getUserManager() {
 		return userMgr;
 	}
@@ -266,16 +271,16 @@ public class RepositoryManager {
 
 		log.info("Known Repositories:");
 		String[] names = getRepositoryNames(rootDirFile);
-		for (int i = 0; i < names.length; i++) {
-			log.info("   " + names[i]);
+		for (String name : names) {
+			log.info("   " + name);
 		}
 		if (names.length == 0) {
 			log.info("   <none>");
 		}
-		for (int i = 0; i < names.length; i++) {
-			File f = new File(rootDirFile, NamingUtilities.mangle(names[i]));
+		for (String name : names) {
+			File f = new File(rootDirFile, NamingUtilities.mangle(name));
 			if (!f.isDirectory()) {
-				log.error("Error while processing repository " + names[i] +
+				log.error("Error while processing repository " + name +
 					", directory not found: " + f);
 				continue;
 			}
@@ -283,15 +288,14 @@ public class RepositoryManager {
 				throw new IOException(f.getAbsolutePath() + " can not be written to");
 			}
 			try {
-				Repository rep = new Repository(this, null, f, names[i]);
-				String name = rep.getName();
+				Repository rep = new Repository(this, null, f, name);
 				repositoryMap.put(name, rep);
 			}
 			catch (UserAccessException e) {
 				// ignore
 			}
 			catch (Exception e) {
-				log.error("Error while processing repository " + names[i] + ", " + e.getMessage());
+				log.error("Error while processing repository " + name + ", " + e.getMessage());
 				continue;
 			}
 		}
@@ -358,16 +362,16 @@ public class RepositoryManager {
 			return new String[0];
 		}
 		ArrayList<String> list = new ArrayList<>(dirList.length);
-		for (int i = 0; i < dirList.length; i++) {
-			if (!dirList[i].isDirectory() ||
-				LocalFileSystem.isHiddenDirName(dirList[i].getName())) {
+		for (File element : dirList) {
+			if (!element.isDirectory() ||
+				LocalFileSystem.isHiddenDirName(element.getName())) {
 				continue;
 			}
-			if (!NamingUtilities.isValidMangledName(dirList[i].getName())) {
-				log.warn("Ignoring repository directory with bad name: " + dirList[i]);
+			if (!NamingUtilities.isValidMangledName(element.getName())) {
+				log.warn("Ignoring repository directory with bad name: " + element);
 				continue;
 			}
-			list.add(NamingUtilities.demangle(dirList[i].getName()));
+			list.add(NamingUtilities.demangle(element.getName()));
 		}
 		Collections.sort(list);
 		String[] names = new String[list.size()];

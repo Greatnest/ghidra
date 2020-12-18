@@ -23,12 +23,14 @@ import docking.action.*;
 import ghidra.app.context.ListingActionContext;
 import ghidra.app.decompiler.component.DecompilerController;
 import ghidra.app.plugin.core.decompile.DecompilerActionContext;
+import ghidra.app.util.HelpTopics;
 import ghidra.framework.plugintool.PluginTool;
 import ghidra.program.model.data.*;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.pcode.HighParam;
 import ghidra.program.model.pcode.HighVariable;
 import ghidra.program.util.ProgramLocation;
+import ghidra.util.HelpLocation;
 import ghidra.util.Msg;
 
 public abstract class CreateStructureVariableAction extends DockingAction {
@@ -40,6 +42,7 @@ public abstract class CreateStructureVariableAction extends DockingAction {
 		super("Recover Structure Variable", owner);
 		this.tool = tool;
 		this.controller = controller;
+		setHelpLocation(new HelpLocation(HelpTopics.DECOMPILER, "ActionAutoStructure"));
 		setPopupMenuData(new MenuData(new String[] { "Auto Create Structure" }, "Decompile"));
 		setKeyBindingData(new KeyBindingData(KeyEvent.VK_OPEN_BRACKET, InputEvent.SHIFT_DOWN_MASK));
 	}
@@ -56,6 +59,34 @@ public abstract class CreateStructureVariableAction extends DockingAction {
 		return false;
 	}
 
+	/**
+	 * Check if a variable has a data-type that is suitable for being extended.
+	 * If so return the structure data-type, otherwise return null.
+	 * Modulo typedefs, the data-type of the variable must be exactly a
+	 * "pointer to a structure".  Not a "structure" itself, or a
+	 * "pointer to a pointer to ... a structure".
+	 * @param dt is the data-type of the variable to test
+	 * @return the extendable structure data-type or null
+	 */
+	public static Structure getStructureForExtending(DataType dt) {
+		if (dt instanceof TypeDef) {
+			dt = ((TypeDef) dt).getBaseDataType();
+		}
+		if (dt instanceof Pointer) {
+			dt = ((Pointer) dt).getDataType();
+		}
+		else {
+			return null;
+		}
+		if (dt instanceof TypeDef) {
+			dt = ((TypeDef) dt).getBaseDataType();
+		}
+		if (dt instanceof Structure) {
+			return (Structure) dt;
+		}
+		return null;
+	}
+
 	@Override
 	public abstract boolean isEnabledForContext(ActionContext context);
 
@@ -67,13 +98,9 @@ public abstract class CreateStructureVariableAction extends DockingAction {
 	 */
 	protected void adjustCreateStructureMenuText(DataType dt, boolean isThisParam) {
 
-		// rip off any multi-level pointers
-		while (dt instanceof Pointer) {
-			dt = ((Pointer) dt).getDataType();
-		}
-
+		dt = getStructureForExtending(dt);
 		String menuString = "Auto Create Structure";
-		if (dt instanceof Structure) {
+		if (dt != null) {
 			if (isThisParam) {
 				menuString = "Auto Fill in Class Structure";
 			}
