@@ -6,7 +6,7 @@ jobs:
   build:
     strategy:
       matrix:
-        platform: [ubuntu-latest, macos-latest, windows-2016]
+        platform: [ubuntu-latest,windows-latest]
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -21,13 +21,8 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y bison flex
         
-      - name: Build Dependencies (macOS)
-        if: matrix.platform == 'macos-latest'
-        run: |
-          brew install bison flex curl
-
       - name: Build Dependencies (Windows)
-        if: matrix.platform == 'windows-2016'
+        if: matrix.platform == 'windows-latest'
         run: |
           choco install winflexbison
           ren "C:\ProgramData\chocolatey\bin\win_bison.exe" "bison.exe"
@@ -50,9 +45,3 @@ jobs:
         with:
           name: ghidra-windows-dev
           path: build/dist/ghidra_*_win64.zip
-
-      - uses: actions/upload-artifact@v2          
-        if: matrix.platform == 'macos-latest'
-        with:
-          name: ghidra-macos-dev
-          path: build/dist/ghidra_*_osx64.zip
