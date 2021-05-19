@@ -38,10 +38,10 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         with:
           name: ghidra-linux-dev
-          path: build/dist/ghidra_*_linux64.zip
+          path: build/dist/
 
       - uses: actions/upload-artifact@v2          
         if: matrix.platform == 'windows-latest'
         with:
           name: ghidra-windows-dev
-          path: build/dist/ghidra_*_win64.zip
+          path: build/dist/
