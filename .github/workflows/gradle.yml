@@ -41,7 +41,7 @@ jobs:
           path: build/dist/ghidra_*_linux64.zip
 
       - uses: actions/upload-artifact@v2          
-        if: matrix.platform == 'windows-2016'
+        if: matrix.platform == 'windows-latest'
         with:
           name: ghidra-windows-dev
           path: build/dist/ghidra_*_win64.zip
