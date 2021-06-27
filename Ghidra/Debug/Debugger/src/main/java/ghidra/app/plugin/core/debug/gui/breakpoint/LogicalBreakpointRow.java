@@ -24,7 +24,6 @@ import ghidra.framework.model.DomainObject;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Program;
 import ghidra.trace.model.breakpoint.TraceBreakpointKind.TraceBreakpointKindSet;
-import ghidra.util.Msg;
 
 public class LogicalBreakpointRow {
 	private final DebuggerBreakpointsProvider provider;
@@ -33,6 +32,11 @@ public class LogicalBreakpointRow {
 	public LogicalBreakpointRow(DebuggerBreakpointsProvider provider, LogicalBreakpoint lb) {
 		this.provider = provider;
 		this.lb = lb;
+	}
+
+	@Override
+	public String toString() {
+		return "<Row " + lb + ">";
 	}
 
 	public LogicalBreakpoint getLogicalBreakpoint() {
@@ -64,7 +68,7 @@ public class LogicalBreakpointRow {
 					? lb.enableForTrace(provider.currentTrace)
 					: lb.enable();
 			future.exceptionally(ex -> {
-				Msg.showError(this, null, "Toggle Breakpoint", "Could not enable breakpoint", ex);
+				provider.breakpointError("Toggle Breakpoint", "Could not enable breakpoint", ex);
 				return null;
 			});
 		}
@@ -73,7 +77,7 @@ public class LogicalBreakpointRow {
 					? lb.disableForTrace(provider.currentTrace)
 					: lb.disable();
 			future.exceptionally(ex -> {
-				Msg.showError(this, null, "Toggle Breakpoint", "Could not disable breakpoint", ex);
+				provider.breakpointError("Toggle Breakpoint", "Could not disable breakpoint", ex);
 				return null;
 			});
 		}
@@ -117,5 +121,17 @@ public class LogicalBreakpointRow {
 			return lb.getTraceBreakpoints(provider.currentTrace).size();
 		}
 		return lb.getTraceBreakpoints().size();
+	}
+
+	/**
+	 * Check if it has mapped locations, regardless of whether those locations are present
+	 * 
+	 * @return true if mapped (or mappable), false if not.
+	 */
+	public boolean isMapped() {
+		if (provider.isFilterByCurrentTrace()) {
+			return lb.getMappedTraces().contains(provider.currentTrace);
+		}
+		return !lb.getMappedTraces().isEmpty();
 	}
 }

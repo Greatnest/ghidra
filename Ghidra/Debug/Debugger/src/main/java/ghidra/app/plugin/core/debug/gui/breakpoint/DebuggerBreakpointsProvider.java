@@ -15,8 +15,6 @@
  */
 package ghidra.app.plugin.core.debug.gui.breakpoint;
 
-import static ghidra.lifecycle.Unfinished.TODO;
-
 import java.awt.BorderLayout;
 import java.awt.event.*;
 import java.util.*;
@@ -62,7 +60,7 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 
 	protected enum LogicalBreakpointTableColumns
 		implements EnumeratedTableColumn<LogicalBreakpointTableColumns, LogicalBreakpointRow> {
-		ENABLED("Enabled", Enablement.class, LogicalBreakpointRow::getEnablement, LogicalBreakpointRow::setEnablement, true),
+		ENABLED("", Enablement.class, LogicalBreakpointRow::getEnablement, LogicalBreakpointRow::setEnablement, true),
 		IMAGE("Image", String.class, LogicalBreakpointRow::getImageName, true),
 		ADDRESS("Address", Address.class, LogicalBreakpointRow::getAddress, true),
 		LENGTH("Length", Long.class, LogicalBreakpointRow::getLength, true),
@@ -138,7 +136,7 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 
 	protected enum BreakpointLocationTableColumns
 		implements EnumeratedTableColumn<BreakpointLocationTableColumns, BreakpointLocationRow> {
-		ENABLED("Enabled", Boolean.class, BreakpointLocationRow::isEnabled, BreakpointLocationRow::setEnabled, true),
+		ENABLED("", Boolean.class, BreakpointLocationRow::isEnabled, BreakpointLocationRow::setEnabled, true),
 		NAME("Name", String.class, BreakpointLocationRow::getName, BreakpointLocationRow::setName, true),
 		ADDRESS("Address", Address.class, BreakpointLocationRow::getAddress, true),
 		TRACE("Trace", String.class, BreakpointLocationRow::getTraceName, true),
@@ -223,11 +221,9 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 			return !ctx.getSelection().isEmpty();
 		}
 		if (context instanceof DebuggerBreakpointLocationsActionContext) {
-			// TODO: Allow toggling of individual breakpoint locations, if model permits
-			return false;
-			/*DebuggerBreakpointLocationsActionContext ctx =
+			DebuggerBreakpointLocationsActionContext ctx =
 				(DebuggerBreakpointLocationsActionContext) context;
-			return !ctx.getSelection().isEmpty();*/
+			return !ctx.getSelection().isEmpty();
 		}
 		return false;
 	}
@@ -254,15 +250,18 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 					(DebuggerLogicalBreakpointsActionContext) context;
 				Collection<LogicalBreakpoint> sel = ctx.getSelection();
 				breakpointService.enableAll(sel, null).exceptionally(ex -> {
-					Msg.showError(this, getComponent(), "Enable Breakpoints",
-						"Could not enable breakpoints", ex);
+					breakpointError("Enable Breakpoints", "Could not enable breakpoints", ex);
 					return null;
 				});
 			}
 			if (context instanceof DebuggerBreakpointLocationsActionContext) {
 				DebuggerBreakpointLocationsActionContext ctx =
 					(DebuggerBreakpointLocationsActionContext) context;
-				TODO("Toggling individual breakpoint locations", ctx);
+				Collection<TraceBreakpoint> sel = ctx.getSelection();
+				breakpointService.enableLocs(sel).exceptionally(ex -> {
+					breakpointError("Enable Breakpoints", "Could not enable breakpoints", ex);
+					return null;
+				});
 			}
 		}
 
@@ -286,8 +285,7 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 		public void actionPerformed(ActionContext context) {
 			Set<LogicalBreakpoint> all = breakpointService.getAllBreakpoints();
 			breakpointService.enableAll(all, null).exceptionally(ex -> {
-				Msg.showError(this, getComponent(), "Enable All Breakpoints",
-					"Could not enable breakpoints", ex);
+				breakpointError("Enable All Breakpoints", "Could not enable breakpoints", ex);
 				return null;
 			});
 		}
@@ -320,15 +318,18 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 					(DebuggerLogicalBreakpointsActionContext) context;
 				Collection<LogicalBreakpoint> sel = ctx.getSelection();
 				breakpointService.disableAll(sel, null).exceptionally(ex -> {
-					Msg.showError(this, getComponent(), "Disable Breakpoints",
-						"Could not disable breakpoints", ex);
+					breakpointError("Disable Breakpoints", "Could not disable breakpoints", ex);
 					return null;
 				});
 			}
 			if (context instanceof DebuggerBreakpointLocationsActionContext) {
 				DebuggerBreakpointLocationsActionContext ctx =
 					(DebuggerBreakpointLocationsActionContext) context;
-				TODO("Toggling individual breakpoint locations", ctx);
+				Collection<TraceBreakpoint> sel = ctx.getSelection();
+				breakpointService.disableLocs(sel).exceptionally(ex -> {
+					breakpointError("Disable Breakpoints", "Could not disable breakpoints", ex);
+					return null;
+				});
 			}
 		}
 
@@ -352,8 +353,7 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 		public void actionPerformed(ActionContext context) {
 			Set<LogicalBreakpoint> all = breakpointService.getAllBreakpoints();
 			breakpointService.disableAll(all, null).exceptionally(ex -> {
-				Msg.showError(this, getComponent(), "Disable All Breakpoints",
-					"Could not disable breakpoints", ex);
+				breakpointError("Disable All Breakpoints", "Could not disable breakpoints", ex);
 				return null;
 			});
 		}
@@ -365,7 +365,7 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 	}
 
 	protected class ClearSelectedBreakpointsAction extends AbstractClearSelectedBreakpointsAction {
-		public static final String GROUP = DebuggerResources.GROUP_BREAKPOINTS;
+		public static final String GROUP = DebuggerResources.GROUP_BREAKPOINTS + "Clear";
 
 		public ClearSelectedBreakpointsAction() {
 			super(plugin);
@@ -382,15 +382,18 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 					(DebuggerLogicalBreakpointsActionContext) context;
 				Collection<LogicalBreakpoint> sel = ctx.getSelection();
 				breakpointService.deleteAll(sel, null).exceptionally(ex -> {
-					Msg.showError(this, getComponent(), "Clear Breakpoints",
-						"Could not clear breakpoints", ex);
+					breakpointError("Clear Breakpoints", "Could not clear breakpoints", ex);
 					return null;
 				});
 			}
 			if (context instanceof DebuggerBreakpointLocationsActionContext) {
 				DebuggerBreakpointLocationsActionContext ctx =
 					(DebuggerBreakpointLocationsActionContext) context;
-				TODO("Clearing individual breakpoint locations", ctx);
+				Collection<TraceBreakpoint> sel = ctx.getSelection();
+				breakpointService.deleteLocs(sel).exceptionally(ex -> {
+					breakpointError("Clear Breakpoints", "Could not clear breakpoints", ex);
+					return null;
+				});
 			}
 		}
 
@@ -401,7 +404,7 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 	}
 
 	protected class ClearAllBreakpointsAction extends AbstractClearAllBreakpointsAction {
-		public static final String GROUP = DebuggerResources.GROUP_BREAKPOINTS;
+		public static final String GROUP = DebuggerResources.GROUP_BREAKPOINTS + "Clear";
 
 		public ClearAllBreakpointsAction() {
 			super(plugin);
@@ -414,8 +417,7 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 		public void actionPerformed(ActionContext context) {
 			Set<LogicalBreakpoint> all = breakpointService.getAllBreakpoints();
 			breakpointService.deleteAll(all, null).exceptionally(ex -> {
-				Msg.showError(this, getComponent(), "Clear All Breakpoints",
-					"Could not clear breakpoints", ex);
+				breakpointError("Clear All Breakpoints", "Could not clear breakpoints", ex);
 				return null;
 			});
 		}
@@ -423,6 +425,63 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 		@Override
 		public boolean isEnabledForContext(ActionContext context) {
 			return breakpointService != null && !breakpointService.getAllBreakpoints().isEmpty();
+		}
+	}
+
+	protected abstract class CommonMakeBreakpointsEffectiveAction
+			extends AbstractMakeBreakpointsEffectiveAction {
+		public static final String GROUP = DebuggerResources.GROUP_BREAKPOINTS;
+
+		public CommonMakeBreakpointsEffectiveAction() {
+			super(plugin);
+			setToolBarData(new ToolBarData(ICON, GROUP));
+		}
+
+		@Override
+		public void actionPerformed(ActionContext context) {
+			Set<LogicalBreakpoint> enablable = breakpointService.getAllBreakpoints()
+					.stream()
+					.filter(lb -> lb.computeEnablement() == Enablement.INEFFECTIVE_ENABLED &&
+						!lb.getMappedTraces().isEmpty())
+					.collect(Collectors.toSet());
+			breakpointService.enableAll(enablable, null).exceptionally(ex -> {
+				breakpointError("Make Breakpoints Effective", "Could not enable breakpoints", ex);
+				return null;
+			});
+		}
+	}
+
+	protected class MakeBreakpointsEffectiveAction extends CommonMakeBreakpointsEffectiveAction {
+		public MakeBreakpointsEffectiveAction() {
+			super();
+			addLocalAction(this);
+			setEnabled(false);
+		}
+
+		@Override
+		public boolean isEnabledForContext(ActionContext context) {
+			if (breakpointService == null) {
+				return false;
+			}
+			Set<LogicalBreakpoint> all = breakpointService.getAllBreakpoints();
+			for (LogicalBreakpoint lb : all) {
+				if (lb.computeEnablement() != Enablement.INEFFECTIVE_ENABLED) {
+					continue;
+				}
+				if (lb.getMappedTraces().isEmpty()) {
+					continue;
+				}
+				return true;
+			}
+			return false;
+		}
+	}
+
+	protected class MakeBreakpointsEffectiveResolutionAction
+			extends CommonMakeBreakpointsEffectiveAction {
+		@Override
+		public boolean isValidContext(ActionContext context) {
+			return context instanceof DebuggerMakeBreakpointsEffectiveActionContext;
 		}
 	}
 
@@ -540,12 +599,14 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 
 	// @AutoServiceConsumed via method
 	private DebuggerLogicalBreakpointService breakpointService;
-	// @AutoServiceConsumed via method
+	// @AutoServiceConsumed via method, package access for BreakpointLogicalRow
 	DebuggerModelService modelService;
 	@AutoServiceConsumed
 	private DebuggerListingService listingService;
 	@AutoServiceConsumed
 	private DebuggerTraceManagerService traceManager;
+	@AutoServiceConsumed
+	private DebuggerConsoleService consoleService;
 	@AutoServiceConsumed
 	private GoToService goToService;
 	@SuppressWarnings("unused")
@@ -571,13 +632,18 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 
 	private ActionContext myActionContext;
 
+	private final DebuggerMakeBreakpointsEffectiveActionContext makeEffectiveResolutionContext =
+		new DebuggerMakeBreakpointsEffectiveActionContext();
+
 	// package access for testing
-	EnableSelectedBreakpointsAction actionEnableSelectedBreakpointsAction;
-	EnableAllBreakpointsAction actionEnableAllBreakpointsAction;
-	DisableSelectedBreakpointsAction actionDisableSelectedBreakpointsAction;
-	DisableAllBreakpointsAction actionDisableAllBreakpointsAction;
-	ClearSelectedBreakpointsAction actionClearSelectedBreakpointsAction;
-	ClearAllBreakpointsAction actionClearAllBreakpointsAction;
+	EnableSelectedBreakpointsAction actionEnableSelectedBreakpoints;
+	EnableAllBreakpointsAction actionEnableAllBreakpoints;
+	DisableSelectedBreakpointsAction actionDisableSelectedBreakpoints;
+	DisableAllBreakpointsAction actionDisableAllBreakpoints;
+	ClearSelectedBreakpointsAction actionClearSelectedBreakpoints;
+	ClearAllBreakpointsAction actionClearAllBreakpoints;
+	MakeBreakpointsEffectiveAction actionMakeBreakpointsEffective;
+	MakeBreakpointsEffectiveResolutionAction actionMakeBreakpointsEffectiveResolution;
 	ToggleDockingAction actionFilterByCurrentTrace;
 	ToggleDockingAction actionFilterLocationsByBreakpoints;
 
@@ -596,6 +662,35 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 		setDefaultWindowPosition(WindowPosition.RIGHT);
 		setVisible(true);
 		createActions();
+	}
+
+	protected void dispose() {
+		if (consoleService != null) {
+			if (actionMakeBreakpointsEffectiveResolution != null) {
+				consoleService.removeResolutionAction(actionMakeBreakpointsEffectiveResolution);
+			}
+		}
+	}
+
+	@Override
+	public void contextChanged() {
+		super.contextChanged();
+		if (consoleService == null) {
+			return;
+		}
+		// TODO: This should probably check for its existence first
+		// Kind of a hack, but it works.
+		if (actionMakeBreakpointsEffective != null &&
+			actionMakeBreakpointsEffective.isEnabledForContext(myActionContext)) {
+			if (!consoleService.logContains(makeEffectiveResolutionContext)) {
+				consoleService.log(DebuggerResources.ICON_PROVIDER_BREAKPOINTS,
+					"There are ineffective breakpoints that can be placed",
+					makeEffectiveResolutionContext);
+			}
+		}
+		else {
+			consoleService.removeFromLog(makeEffectiveResolutionContext);
+		}
 	}
 
 	@AutoServiceConsumed
@@ -620,6 +715,15 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 		this.modelService = modelService;
 		if (this.modelService != null) {
 			this.modelService.addTraceRecordersChangedListener(recorderListener);
+		}
+	}
+
+	@AutoServiceConsumed
+	private void setConsoleService(DebuggerConsoleService consoleService) {
+		if (consoleService != null) {
+			if (actionMakeBreakpointsEffectiveResolution != null) {
+				consoleService.addResolutionAction(actionMakeBreakpointsEffectiveResolution);
+			}
 		}
 	}
 
@@ -671,7 +775,6 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 	@Override
 	public void breakpointsRemoved(Collection<LogicalBreakpoint> clb) {
 		Swing.runIfSwingOrRunLater(() -> {
-			Msg.debug(this, "LBs removed: " + clb);
 			breakpointTableModel.deleteAllItems(clb);
 			contextChanged();
 		});
@@ -781,6 +884,11 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 					.stream()
 					.map(LogicalBreakpointRow::getLogicalBreakpoint)
 					.collect(Collectors.toList());
+			// Do this first to prevent overriding context in event chain
+			if (!set.isEmpty()) {
+				locationTable.clearSelection();
+				locationTable.getSelectionManager().clearSavedSelection();
+			}
 			myActionContext = new DebuggerLogicalBreakpointsActionContext(set);
 			if (isFilterLocationsByBreakpoints()) {
 				locationTableModel.fireTableDataChanged();
@@ -815,7 +923,13 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 					.stream()
 					.map(BreakpointLocationRow::getTraceBreakpoint)
 					.collect(Collectors.toList());
+			// Do this first to avoid overriding context in event chain
+			if (!set.isEmpty()) {
+				breakpointTable.clearSelection();
+				breakpointTable.getSelectionManager().clearSavedSelection();
+			}
 			myActionContext = new DebuggerBreakpointLocationsActionContext(set);
+			contextChanged();
 		});
 		locationTable.addMouseListener(new MouseAdapter() {
 			@Override
@@ -845,7 +959,8 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 		bptEnCol.setCellRenderer(new DebuggerBreakpointEnablementTableCellRenderer());
 		bptEnCol.setCellEditor(
 			new DebuggerBreakpointEnablementTableCellEditor(breakpointFilterPanel));
-		bptEnCol.setPreferredWidth(30);
+		bptEnCol.setMaxWidth(24);
+		bptEnCol.setMinWidth(24);
 		TableColumn bptAddrCol =
 			bptColModel.getColumn(LogicalBreakpointTableColumns.ADDRESS.ordinal());
 		bptAddrCol.setPreferredWidth(150);
@@ -864,7 +979,8 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 			locColModel.getColumn(BreakpointLocationTableColumns.ENABLED.ordinal());
 		locEnCol.setCellRenderer(new DebuggerBreakpointLocEnabledTableCellRenderer());
 		locEnCol.setCellEditor(new DebuggerBreakpointLocEnabledTableCellEditor());
-		locEnCol.setPreferredWidth(30);
+		locEnCol.setMaxWidth(24);
+		locEnCol.setMinWidth(24);
 		TableColumn locAddrCol =
 			locColModel.getColumn(BreakpointLocationTableColumns.ADDRESS.ordinal());
 		locAddrCol.setCellRenderer(CustomToStringCellRenderer.MONO_OBJECT);
@@ -921,12 +1037,13 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 	}
 
 	protected void createActions() {
-		actionEnableSelectedBreakpointsAction = new EnableSelectedBreakpointsAction();
-		actionEnableAllBreakpointsAction = new EnableAllBreakpointsAction();
-		actionDisableSelectedBreakpointsAction = new DisableSelectedBreakpointsAction();
-		actionDisableAllBreakpointsAction = new DisableAllBreakpointsAction();
-		actionClearSelectedBreakpointsAction = new ClearSelectedBreakpointsAction();
-		actionClearAllBreakpointsAction = new ClearAllBreakpointsAction();
+		actionEnableSelectedBreakpoints = new EnableSelectedBreakpointsAction();
+		actionEnableAllBreakpoints = new EnableAllBreakpointsAction();
+		actionDisableSelectedBreakpoints = new DisableSelectedBreakpointsAction();
+		actionDisableAllBreakpoints = new DisableAllBreakpointsAction();
+		actionClearSelectedBreakpoints = new ClearSelectedBreakpointsAction();
+		actionClearAllBreakpoints = new ClearAllBreakpointsAction();
+		actionMakeBreakpointsEffective = new MakeBreakpointsEffectiveAction();
 		actionFilterByCurrentTrace = FilterAction.builder(plugin)
 				.toolBarIcon(DebuggerResources.ICON_TRACE)
 				.description("Filter locations to those in current trace")
@@ -938,6 +1055,8 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 				.helpLocation(new HelpLocation(plugin.getName(), "filter_by_logical"))
 				.onAction(this::toggledFilterLocationsByBreakpoints)
 				.buildAndInstallLocal(this);
+
+		actionMakeBreakpointsEffectiveResolution = new MakeBreakpointsEffectiveResolutionAction();
 	}
 
 	private void toggledFilterByCurrentTrace(ActionContext ignored) {
@@ -978,5 +1097,14 @@ public class DebuggerBreakpointsProvider extends ComponentProviderAdapter
 	public void setSelectedLocations(Set<TraceBreakpoint> sel) {
 		DebuggerResources.setSelectedRows(sel, locationTableModel::getRow, locationTable,
 			locationTableModel, locationFilterPanel);
+	}
+
+	protected void breakpointError(String title, String message, Throwable ex) {
+		if (consoleService == null) {
+			Msg.showError(this, null, title, message, ex);
+			return;
+		}
+		Msg.error(this, message, ex);
+		consoleService.log(DebuggerResources.ICON_LOG_ERROR, message + " (" + ex + ")");
 	}
 }

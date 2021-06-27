@@ -99,6 +99,8 @@ public interface DebuggerResources {
 		ResourceManager.loadImage("images/breakpoints-disable-all.png");
 	ImageIcon ICON_CLEAR_ALL_BREAKPOINTS =
 		ResourceManager.loadImage("images/breakpoints-clear-all.png");
+	ImageIcon ICON_MAKE_BREAKPOINTS_EFFECTIVE =
+		ResourceManager.loadImage("images/breakpoints-make-effective.png");
 
 	// TODO: Some overlay to indicate dynamic, or new icon altogether
 	ImageIcon ICON_LISTING = ResourceManager.loadImage("images/Browser.gif");
@@ -571,6 +573,22 @@ public interface DebuggerResources {
 		}
 	}
 
+	abstract class AbstractStepLastAction extends DockingAction {
+		public static final String NAME = "Step Last";
+		public static final Icon ICON = ICON_STEP_FINISH; // TODO: Draw one
+		public static final String HELP_ANCHOR = "step_last";
+
+		public static HelpLocation help(Plugin owner) {
+			return new HelpLocation(owner.getName(), HELP_ANCHOR);
+		}
+
+		public AbstractStepLastAction(Plugin owner) {
+			super(NAME, owner.getName());
+			setDescription("Repeat the last stepping action");
+			setHelpLocation(help(owner));
+		}
+	}
+
 	abstract class AbstractInterruptAction extends DockingAction {
 		public static final String NAME = "Interrupt";
 		public static final Icon ICON = ICON_TERMINATE;
@@ -954,12 +972,14 @@ public interface DebuggerResources {
 	interface SelectNoneAction {
 		String NAME = "Select None";
 		String GROUP = "Select";
+		String HELP_ANCHOR = "select_none";
 
 		static ActionBuilder builder(Plugin owner) {
 			String ownerName = owner.getName();
 			return new ActionBuilder(NAME, ownerName)
 					.popupMenuGroup(GROUP)
-					.popupMenuPath(NAME);
+					.popupMenuPath(NAME)
+					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
 		}
 	}
 
@@ -986,9 +1006,25 @@ public interface DebuggerResources {
 
 		static ActionBuilder builder(Plugin owner) {
 			String ownerName = owner.getName();
-			return new ActionBuilder(NAME, ownerName).description(DESCRIPTION)
+			return new ActionBuilder(NAME, ownerName)
+					.description(DESCRIPTION)
 					.menuGroup(GROUP)
 					.menuPath(NAME)
+					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
+		}
+	}
+
+	interface OpenProgramAction {
+		String NAME = "Open Program";
+		Icon ICON = ICON_PROGRAM;
+		String DESCRIPTION = "Open the program";
+		String HELP_ANCHOR = "open_program";
+
+		static ActionBuilder builder(Plugin owner) {
+			String ownerName = owner.getName();
+			return new ActionBuilder(NAME, ownerName)
+					.description(DESCRIPTION)
+					.toolBarIcon(ICON)
 					.helpLocation(new HelpLocation(ownerName, HELP_ANCHOR));
 		}
 	}
@@ -1138,6 +1174,18 @@ public interface DebuggerResources {
 			super(NAME, owner.getName());
 			setDescription("Clear all breakpoints in the table");
 			// TODO: Should combine help with other clear actions?
+			setHelpLocation(new HelpLocation(owner.getName(), HELP_ANCHOR));
+		}
+	}
+
+	abstract class AbstractMakeBreakpointsEffectiveAction extends DockingAction {
+		public static final String NAME = "Make Breakpoints Effective";
+		public static final Icon ICON = ICON_MAKE_BREAKPOINTS_EFFECTIVE;
+		public static final String HELP_ANCHOR = "make_breakpoints_effective";
+
+		public AbstractMakeBreakpointsEffectiveAction(Plugin owner) {
+			super(NAME, owner.getName());
+			setDescription("Place enabled but ineffective breakpoints where possible");
 			setHelpLocation(new HelpLocation(owner.getName(), HELP_ANCHOR));
 		}
 	}
